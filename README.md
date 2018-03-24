@@ -1,37 +1,67 @@
-# cfg-if
+# cfg-match
 
-[![Build Status](https://travis-ci.org/alexcrichton/cfg-if.svg?branch=master)](https://travis-ci.org/alexcrichton/cfg-if)
+Provides cfg_match and cfg_match_with_default macros
 
-[Documentation](http://alexcrichton.com/cfg-if)
+[Based on: cfg-if](http://alexcrichton.com/cfg-if)
 
-A macro to ergonomically define an item depending on a large number of #[cfg]
-parameters. Structured like an if-else chain, the first matching branch is the
+Macros to ergonomically define an item depending on a large number of #[cfg]
+parameters. Structured like a match block, the first matching branch is the
 item that gets emitted.
-
-```toml
-[dependencies]
-cfg-if = "0.1"
-```
 
 ## Example
 
 ```rust
 #[macro_use]
-extern crate cfg_if;
+extern crate cfg_match;
 
-cfg_if! {
-    if #[cfg(unix)] {
-        fn foo() { /* unix specific functionality */ }
-    } else if #[cfg(target_pointer_width = "32")] {
-        fn foo() { /* non-unix, 32-bit functionality */ }
-    } else {
-        fn foo() { /* fallback implementation */ }
+fn works() -> bool {
+    cfg_match! {
+         #[cfg(foo)] => { false },
+         #[cfg(test)] => { true }
     }
 }
 
-fn main() {
-    foo();
+fn works_with_default() -> bool {
+    cfg_match_with_default! {
+        #[cfg(foo)] => { false },
+        #[cfg(bar)] => { false },
+        _ => { true }
+    }
 }
+
+#[test]
+fn smoke() {
+    assert!(works());
+    assert!(works_with_default());
+}
+
+```
+
+When using cfg_match and no match is possible you get a compilation error:
+
+```rust
+fn does_not_compile() -> bool {
+    cfg_match! {
+        #[cfg(foo)] => { false },
+        #[cfg(bar)] => { false }
+    }
+}
+```
+
+You get the following error:
+
+```text
+error: cfg_match: #[cfg(<check desired feature case>)] was not implemented.
+  --> tests/xcrate.rs:45:5
+   |
+45 | /     cfg_match! {
+46 | |         #[cfg(foo)] => { false },
+...  |
+51 | |         }
+52 | |     }
+   | |_____^
+   |
+   = note: this error originates in a macro outside of the current crate (in Nightly builds, run with -Z external-macro-backtrace for more info)
 ```
 
 # License

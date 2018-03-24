@@ -1,17 +1,13 @@
 [package]
-name = "cfg-if"
-version = "0.1.2"
-authors = ["Alex Crichton <alex@alexcrichton.com>"]
+name = "cfg-match"
+version = "0.1.0"
+authors = ["Liviu Dumea <dwmlyvyw@gmail.com>"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/alexcrichton/cfg-if"
-homepage = "https://github.com/alexcrichton/cfg-if"
-documentation = "http://alexcrichton.com/cfg-if"
+repository = "https://github.com/lyvyw/cfg-match"
 description = """
 A macro to ergonomically define an item depending on a large number of #[cfg]
-parameters. Structured like an if-else chain, the first matching branch is the
+parameters. Structured like a match chain, the first matching branch is the
 item that gets emitted.
 """
 
-[badges]
-travis-ci = { repository = "alexcrichton/cfg-if" }

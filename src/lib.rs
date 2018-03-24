@@ -1,126 +1,220 @@
-//! A macro for defining #[cfg] if-else statements.
+#![no_std]
+#![cfg_attr(test, deny(warnings))]
+
+//! Based on https://github.com/alexcrichton/cfg-if
+//! A macro for defining #[cfg] match statements.
 //!
-//! The macro provided by this crate, `cfg_if`, is similar to the `if/elif` C
-//! preprocessor macro by allowing definition of a cascade of `#[cfg]` cases,
-//! emitting the implementation which matches first.
-//!
-//! This allows you to conveniently provide a long list #[cfg]'d blocks of code
-//! without having to rewrite each clause multiple times.
+//! The macro provided by this crate, `cfg_match` is similar to the `cfg_if`
+//! The difference is that this can be used inside a function or similar
 //!
 //! # Example
 //!
 //! ```
 //! #[macro_use]
-//! extern crate cfg_if;
+//! extern crate cfg_match;
 //!
-//! cfg_if! {
-//!     if #[cfg(unix)] {
-//!         fn foo() { /* unix specific functionality */ }
-//!     } else if #[cfg(target_pointer_width = "32")] {
-//!         fn foo() { /* non-unix, 32-bit functionality */ }
-//!     } else {
-//!         fn foo() { /* fallback implementation */ }
-//!     }
+//! fn foo_bar() -> bool {
+//!    cfg_match_with_default! {
+//!         #[cfg(foo)] => {
+//!            false
+//!        },
+//!         #[cfg(bar)] => {
+//!            false
+//!        },
+//!        _ => {
+//!            true
+//!        }
+//!    }
 //! }
 //!
 //! # fn main() {}
 //! ```
-
-#![no_std]
-
-#![doc(html_root_url = "http://alexcrichton.com/cfg-if")]
-#![deny(missing_docs)]
-#![cfg_attr(test, deny(warnings))]
+//!
 
 #[macro_export]
-macro_rules! cfg_if {
+#[doc(hidden)]
+macro_rules! cfg_match_fail {
+    () => {
+        compile_error!("cfg_match: #[cfg(<check desired feature case>)] was not implemented.");
+    };
+}
+
+#[macro_export]
+macro_rules! cfg_match {
     ($(
-        if #[cfg($($meta:meta),*)] { $($it:item)* }
-    ) else * else {
-        $($it2:item)*
-    }) => {
-        __cfg_if_items! {
+        #[cfg($($meta:meta),*)] =>  $($it:block)*
+    )*) => {
+        __cfg_match_blocks! {
+            () ;
+            $( ( ($($meta),*) ($($it)*) ), )*
+            (
+                 () ({cfg_match_fail!();})
+            ),
+        }
+    };
+     (
+        #[cfg($($i_met:meta),*)] =>  $($i_it:block)*
+        $(
+            , #[cfg($($e_met:meta),*)] =>  $($e_it:block)*
+        )*
+    ) => {
+        __cfg_match_blocks! {
+            () ;
+            ( ($($i_met),*) ($($i_it)*) ),
+            $( ( ($($e_met),*) ($($e_it)*) ), )*
+            (
+                 () ({cfg_match_fail!();})
+            ),
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! cfg_match_with_default {
+    ($(
+        #[cfg($($meta:meta),*)] =>  $($it:block)*
+    )*) => {
+        __cfg_match_blocks! {
+            () ;
+            $( ( ($($meta),*) ($($it)*) ), )*
+            (
+                 () (cfg_match_fail!();)
+            ),
+        }
+    };
+    ($(
+        #[cfg($($meta:meta),*)] =>  $($it:block)* ,
+    )* _=>
+        $($it2:block)*
+    ) => {
+        __cfg_match_blocks! {
             () ;
             $( ( ($($meta),*) ($($it)*) ), )*
             ( () ($($it2)*) ),
         }
     };
-    (
-        if #[cfg($($i_met:meta),*)] { $($i_it:item)* }
+     (
+        #[cfg($($i_met:meta),*)] =>  $($i_it:block)*
         $(
-            else if #[cfg($($e_met:meta),*)] { $($e_it:item)* }
+            , #[cfg($($e_met:meta),*)] =>  $($e_it:block)*
         )*
     ) => {
-        __cfg_if_items! {
+        __cfg_match_blocks! {
             () ;
             ( ($($i_met),*) ($($i_it)*) ),
             $( ( ($($e_met),*) ($($e_it)*) ), )*
-            ( () () ),
+            (
+                 () (cfg_match_fail!();)
+            ),
         }
     }
 }
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __cfg_if_items {
+macro_rules! __cfg_match_blocks {
     (($($not:meta,)*) ; ) => {};
-    (($($not:meta,)*) ; ( ($($m:meta),*) ($($it:item)*) ), $($rest:tt)*) => {
-        __cfg_if_apply! { cfg(all($($m,)* not(any($($not),*)))), $($it)* }
-        __cfg_if_items! { ($($not,)* $($m,)*) ; $($rest)* }
+    (($($not:meta,)*) ; ( ($($m:meta),*) ($($it:block)*) ), $($rest:tt)*) => {
+        __cfg_match_apply! { cfg(all($($m,)* not(any($($not),*)))), $($it)* }
+
+        __cfg_match_blocks! { ($($not,)* $($m,)*) ; $($rest)* }
     }
 }
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __cfg_if_apply {
-    ($m:meta, $($it:item)*) => {
+macro_rules! __cfg_match_apply {
+    ($m:meta, $($it:block)*) => {
         $(#[$m] $it)*
     }
 }
 
 #[cfg(test)]
 mod tests {
-    cfg_if! {
-        if #[cfg(test)] {
-            use core::option::Option as Option2;
-            fn works1() -> Option2<u32> { Some(1) }
-        } else {
-            fn works1() -> Option<u32> { None }
+    use core::option::Option as Option2;
+    fn works1() -> Option2<u32> {
+        cfg_match_with_default! {
+        #[cfg(test)] => {
+            Some(1)
+        },
+        _ => {
+            None
+           }
         }
     }
 
-    cfg_if! {
-        if #[cfg(foo)] {
-            fn works2() -> bool { false }
-        } else if #[cfg(test)] {
-            fn works2() -> bool { true }
-        } else {
-            fn works2() -> bool { false }
+    fn works2() -> bool {
+        cfg_match_with_default! {
+             #[cfg(foo)] => {
+                false
+            },
+            #[cfg(test)] => {
+                true
+            },_=>{
+                false
+            }
         }
     }
 
-    cfg_if! {
-        if #[cfg(foo)] {
-            fn works3() -> bool { false }
-        } else {
-            fn works3() -> bool { true }
+    fn works3() -> bool {
+        cfg_match_with_default! {
+             #[cfg(foo)] => {
+                 false
+            }, _ => {
+                true
+            }
         }
     }
 
-    cfg_if! {
-        if #[cfg(test)] {
-            use core::option::Option as Option3;
-            fn works4() -> Option3<u32> { Some(1) }
+    use core::option::Option as Option3;
+    fn works4() -> Option3<u32> {
+        cfg_match! {
+             #[cfg(test)] => {
+                 Some(1)
+            }
         }
     }
 
-    cfg_if! {
-        if #[cfg(foo)] {
-            fn works5() -> bool { false }
-        } else if #[cfg(test)] {
-            fn works5() -> bool { true }
+    fn works5() -> bool {
+        cfg_match! {
+             #[cfg(foo)] => {
+              false
+            },
+            #[cfg(test)] => {
+                true
+            }
         }
     }
+
+    fn works6() -> bool {
+        cfg_match_with_default! {
+            #[cfg(foo)] => {
+                false
+            },
+            #[cfg(foo2)] => {
+                false
+            },
+            _ => {
+                true
+            }
+        }
+    }
+
+    // this case should fail ()
+    // add new line after ">>>" to compile
+    // >>> 
+    /*
+    fn works7() -> bool {
+        cfg_match! {
+            #[cfg(foo)] => {
+                false
+            },
+            #[cfg(foo2)] => {
+                false
+            }
+        }
+    }
+    // */
 
     #[test]
     fn it_works() {
@@ -129,5 +223,6 @@ mod tests {
         assert!(works3());
         assert!(works4().is_some());
         assert!(works5());
+        assert!(works6());
     }
 }
